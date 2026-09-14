@@ -1,3 +1,4 @@
+import {createNotionRequest,diagnose} from '../lib/notion-api.js';
 import {timingSafeEqual} from 'node:crypto';
 import {DATA_SOURCES,validateRecord,notionProperties} from '../lib/notion-records.js';
 export async function syncRecord(record,request){
@@ -19,7 +20,7 @@ export default async function handler(req,res){
  if(!configured)return res.status(503).json({error:'Vercel에서 NOTION_TOKEN과 24자 이상의 NOTION_SYNC_SECRET 설정이 필요합니다.'});
  const supplied=String(req.headers.authorization||'').replace(/^Bearer /,'');
  if(Buffer.byteLength(supplied)!==Buffer.byteLength(secret)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(secret)))return res.status(401).json({error:'동기화 키를 확인해 주세요.'});
- let record;try{if(JSON.stringify(req.body).length>60000)throw Error();record=validateRecord(req.body);}catch{return res.status(400).json({error:'전송 데이터 형식을 확인해 주세요.'});}
- const request=async(path,body,method='POST')=>{const response=await fetch('https://api.notion.com/v1'+path,{method,headers:{Authorization:`Bearer ${token}`,'Notion-Version':'2025-09-03','Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(6500)});if(!response.ok){const error=new Error(response.status===429?'Notion 요청 한도입니다. 잠시 후 다시 동기화하세요.':`Notion 연결 오류 (${response.status}). 연결 권한과 데이터베이스 설정을 확인해 주세요.`);throw error;}await new Promise(r=>setTimeout(r,350));return response.json();};
- try{return res.status(200).json(await syncRecord(record,request));}catch(e){return res.status(502).json({error:e.name==='TimeoutError'?'Notion 응답 시간이 초과되었습니다. 다시 시도해 주세요.':e.message});}
+ let record;try{if(req.body?.action==='diagnose'){return res.status(200).json(await diagnose(createNotionRequest(token)));}if(JSON.stringify(req.body).length>60000)throw Error();record=validateRecord(req.body);}catch(e){return res.status(e.code?502:400).json({error:e.code?e.message:'전송 데이터 형식을 확인해 주세요.',code:e.code,retryAfter:e.retryAfter});}
+ const request=createNotionRequest(token);
+ try{return res.status(200).json(await syncRecord(record,request));}catch(e){return res.status(502).json({error:e.message,code:e.code,retryAfter:e.retryAfter});}
 }
