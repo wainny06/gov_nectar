@@ -1,3 +1,4 @@
+import {refreshHwaseong} from '../lib/hwaseong-refresh.js';
 import {sources,parseLinks} from '../lib/sources.js';
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
@@ -5,6 +6,7 @@ export default async function handler(req,res){
  let body;try{body=typeof req.body==='string'?JSON.parse(req.body):req.body;}catch{return res.status(400).json({error:'올바른 JSON 요청이 필요합니다.'});}
  const source=sources.find(s=>s.id===body?.source);
  if(!source)return res.status(400).json({error:'지원하지 않는 기관입니다.'});
+ if(source.id==='hwaseong')return res.status(200).json(await refreshHwaseong(async url=>{const r=await fetch(url,{signal:AbortSignal.timeout(12000),headers:{'Accept':'text/html'}});if(!r.ok)throw Error('기관 응답 오류');const bytes=await r.arrayBuffer();if(bytes.byteLength>5e6)throw Error('응답 크기 초과');return new TextDecoder(/euc-kr/i.test(r.headers.get('content-type')||'')?'euc-kr':'utf-8').decode(bytes);}));
  try{
   const response=await fetch(source.url,{signal:AbortSignal.timeout(18000),headers:{'User-Agent':'BeautySupportDesk/1.0 (public notice reader)','Accept':'text/html'}});
   if(!response.ok)throw new Error(`기관 응답 오류 (${response.status})`);
